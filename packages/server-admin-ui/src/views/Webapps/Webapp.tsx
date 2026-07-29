@@ -62,8 +62,12 @@ export default function Webapp({ webAppInfo, ...attributes }: WebappProps) {
     color: 'primary'
   }
 
-  const lead = { style: 'h5 mb-0', color: card.color, classes: '' }
-  lead.classes = classNames(lead.style, 'text-' + card.color, 'text-capitalize')
+  const leadStyle = 'h5 mb-0'
+  const lead = {
+    style: leadStyle,
+    color: card.color,
+    classes: classNames(leadStyle, 'text-' + card.color, 'text-capitalize')
+  }
   const header = webAppInfo?.signalk?.displayName || webAppInfo.name
   const url = urlToWebapp(webAppInfo)
   const appIcon = webAppInfo?.signalk?.appIcon
