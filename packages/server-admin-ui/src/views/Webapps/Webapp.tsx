@@ -6,6 +6,17 @@ import classNames from 'classnames'
 import { toSafeModuleId } from './dynamicutilities'
 
 const ICON_BOX_SIZE = '72px'
+// Match the Appstore's PluginIcon so a webapp tile and a plugin tile read
+// as the same mark.
+const ICON_BORDER_RADIUS = 8
+const DESCRIPTION_MAX_LINES = 3
+
+const descriptionStyle: React.CSSProperties = {
+  display: '-webkit-box',
+  WebkitBoxOrient: 'vertical',
+  WebkitLineClamp: DESCRIPTION_MAX_LINES,
+  overflow: 'hidden'
+}
 
 interface SignalKInfo {
   displayName?: string
@@ -31,7 +42,7 @@ export function urlToWebapp(webAppInfo: WebAppInfo): string {
 }
 
 export default function Webapp({ webAppInfo, ...attributes }: WebappProps) {
-  const padding = { card: 'p-3', icon: 'p-3', lead: 'mt-2' }
+  const padding = { card: 'p-3', icon: 'p-3' }
 
   const card = {
     style: 'clearfix',
@@ -39,12 +50,7 @@ export default function Webapp({ webAppInfo, ...attributes }: WebappProps) {
   }
 
   const lead = { style: 'h5 mb-0', color: card.color, classes: '' }
-  lead.classes = classNames(
-    lead.style,
-    'text-' + card.color,
-    padding.lead,
-    'text-capitalize'
-  )
+  lead.classes = classNames(lead.style, 'text-' + card.color, 'text-capitalize')
   const header = webAppInfo?.signalk?.displayName || webAppInfo.name
   const url = urlToWebapp(webAppInfo)
   const appIcon = webAppInfo?.signalk?.appIcon
@@ -65,7 +71,9 @@ export default function Webapp({ webAppInfo, ...attributes }: WebappProps) {
         : 'unset',
       display: 'flex',
       alignItems: 'center',
-      justifyContent: 'center'
+      justifyContent: 'center',
+      borderRadius: ICON_BORDER_RADIUS,
+      overflow: 'hidden'
     }
     if (appIcon) {
       style.width = style.height = ICON_BOX_SIZE
@@ -83,7 +91,9 @@ export default function Webapp({ webAppInfo, ...attributes }: WebappProps) {
         <Card.Body className={card.style} {...attributes}>
           {blockIcon()}
           <div className={lead.classes}>{header}</div>
-          <div className="text-muted font-xs">{webAppInfo.description}</div>
+          <div className="text-muted font-xs" style={descriptionStyle}>
+            {webAppInfo.description}
+          </div>
         </Card.Body>
       </Card>
     </a>
