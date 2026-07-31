@@ -1445,22 +1445,23 @@ export default class DeltaCache {
     key?: string,
     sourcePolicy?: 'preferred' | 'all'
   ) {
-    const contexts: Context[] = []
-    _.keys(this.cache).forEach((type) => {
-      _.keys(this.cache[type]).forEach((id) => {
+    // Split the dotted path once per call — lodash _.get would re-parse
+    // it per context, and its 500-entry stringToPath memoize cache is
+    // cleared wholesale on overflow, so a server with more distinct
+    // subscribed paths re-parses continuously.
+    const keyParts: string[] = key ? key.split('.') : []
+
+    const deltas: NormalizedDelta[] = []
+    for (const type in this.cache) {
+      const contextsOfType: StringKeyed = this.cache[type]
+      for (const id in contextsOfType) {
         const context = `${type}.${id}` as Context
-        if (contextFilter({ context })) {
-          contexts.push(this.cache[type][id])
+        if (!contextFilter({ context })) {
+          continue
         }
-      })
-    })
-
-    const deltas = contexts.reduce(
-      (acc: NormalizedDelta[], context: Context) => {
-        let deltasToProcess
-
+        const contextNode: StringKeyed = contextsOfType[id]
         if (key === undefined) {
-          deltasToProcess = findDeltas(context)
+          findDeltas(contextNode, deltas)
         } else if (key === '') {
           // An empty-path subscription targets values stored at the
           // context root (e.g. mmsi, name), which live intermixed with
@@ -1468,25 +1469,22 @@ export default class DeltaCache {
           // only those whose own path is empty. Testing `if (key)` here
           // would treat '' as "no key" and leak every path into the
           // bootstrap snapshot.
-          deltasToProcess = findDeltas(context).filter(
-            (delta: NormalizedDelta) => delta.path === ''
-          )
+          findDeltas(contextNode, deltas, hasEmptyPath)
         } else {
-          deltasToProcess = _.get(context, key)
+          let node: StringKeyed | undefined = contextNode
+          for (let i = 0; i < keyParts.length; i++) {
+            node = node?.[keyParts[i]]
+          }
+          if (node) {
+            for (const akey in node) {
+              if (akey !== 'meta') {
+                deltas.push(node[akey])
+              }
+            }
+          }
         }
-        if (deltasToProcess) {
-          acc = acc.concat(
-            _.values(
-              _.pickBy(deltasToProcess, (val, akey) => {
-                return akey !== 'meta'
-              })
-            )
-          )
-        }
-        return acc
-      },
-      []
-    )
+      }
+    }
 
     const preferred =
       sourcePolicy === 'all' ? deltas : this.filterDeltasToPreferred(deltas)
@@ -1515,20 +1513,34 @@ function pathToProcessForFull(pathArray: any[]) {
   return pathArray
 }
 
-function pickDeltasFromBranch(acc: any[], obj: any) {
+const hasEmptyPath = (delta: NormalizedDelta) => delta.path === ''
+
+function pickDeltasFromBranch(
+  acc: any[],
+  obj: any,
+  predicate?: (delta: NormalizedDelta) => boolean
+) {
   if (typeof obj === 'object') {
-    if (isUndefined(obj.path) || isUndefined(obj.value)) {
-      // not a delta, so process possible children
-      _.values(obj).reduce(pickDeltasFromBranch, acc)
-    } else {
+    if (obj.path === undefined || obj.value === undefined) {
+      for (const key in obj) {
+        pickDeltasFromBranch(acc, obj[key], predicate)
+      }
+    } else if (predicate === undefined || predicate(obj)) {
       acc.push(obj)
     }
   }
   return acc
 }
 
-function findDeltas(branchOrLeaf: any) {
-  return _.values(branchOrLeaf).reduce(pickDeltasFromBranch, [])
+function findDeltas(
+  branchOrLeaf: StringKeyed,
+  acc: NormalizedDelta[] = [],
+  predicate?: (delta: NormalizedDelta) => boolean
+) {
+  for (const key in branchOrLeaf) {
+    pickDeltasFromBranch(acc, branchOrLeaf[key], predicate)
+  }
+  return acc
 }
 
 function ensureHasDollarSource(normalizedDelta: NormalizedDelta): SourceRef {
