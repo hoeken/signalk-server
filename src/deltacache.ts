@@ -1445,17 +1445,6 @@ export default class DeltaCache {
     key?: string,
     sourcePolicy?: 'preferred' | 'all'
   ) {
-    const contexts: Context[] = []
-    for (const type in this.cache) {
-      const contextsOfType = this.cache[type]
-      for (const id in contextsOfType) {
-        const context = `${type}.${id}` as Context
-        if (contextFilter({ context })) {
-          contexts.push(contextsOfType[id])
-        }
-      }
-    }
-
     // Split the dotted path once per call — lodash _.get would re-parse
     // it per context, and its 500-entry stringToPath memoize cache is
     // cleared wholesale on overflow, so a server with more distinct
@@ -1463,26 +1452,34 @@ export default class DeltaCache {
     const keyParts: string[] = key ? key.split('.') : []
 
     const deltas: NormalizedDelta[] = []
-    for (const context of contexts) {
-      if (key === undefined) {
-        findDeltas(context, deltas)
-      } else if (key === '') {
-        // An empty-path subscription targets values stored at the
-        // context root (e.g. mmsi, name), which live intermixed with
-        // nested path branches. Collect every cached delta and keep
-        // only those whose own path is empty. Testing `if (key)` here
-        // would treat '' as "no key" and leak every path into the
-        // bootstrap snapshot.
-        findDeltas(context, deltas, hasEmptyPath)
-      } else {
-        let node: any = context
-        for (let i = 0; i < keyParts.length; i++) {
-          node = node?.[keyParts[i]]
+    for (const type in this.cache) {
+      const contextsOfType: StringKeyed = this.cache[type]
+      for (const id in contextsOfType) {
+        const context = `${type}.${id}` as Context
+        if (!contextFilter({ context })) {
+          continue
         }
-        if (node) {
-          for (const akey in node) {
-            if (akey !== 'meta') {
-              deltas.push(node[akey])
+        const contextNode: StringKeyed = contextsOfType[id]
+        if (key === undefined) {
+          findDeltas(contextNode, deltas)
+        } else if (key === '') {
+          // An empty-path subscription targets values stored at the
+          // context root (e.g. mmsi, name), which live intermixed with
+          // nested path branches. Collect every cached delta and keep
+          // only those whose own path is empty. Testing `if (key)` here
+          // would treat '' as "no key" and leak every path into the
+          // bootstrap snapshot.
+          findDeltas(contextNode, deltas, hasEmptyPath)
+        } else {
+          let node: StringKeyed | undefined = contextNode
+          for (let i = 0; i < keyParts.length; i++) {
+            node = node?.[keyParts[i]]
+          }
+          if (node) {
+            for (const akey in node) {
+              if (akey !== 'meta') {
+                deltas.push(node[akey])
+              }
             }
           }
         }
@@ -1536,7 +1533,7 @@ function pickDeltasFromBranch(
 }
 
 function findDeltas(
-  branchOrLeaf: any,
+  branchOrLeaf: StringKeyed,
   acc: NormalizedDelta[] = [],
   predicate?: (delta: NormalizedDelta) => boolean
 ) {
