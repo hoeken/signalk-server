@@ -1515,18 +1515,33 @@ function pathToProcessForFull(pathArray: any[]) {
 
 const hasEmptyPath = (delta: NormalizedDelta) => delta.path === ''
 
+// A cache leaf carries the delta's own path and value; branch nodes
+// only carry children keyed by path segment or source ref.
+const isCachedDelta = (node: object): node is NormalizedDelta =>
+  'path' in node &&
+  node.path !== undefined &&
+  'value' in node &&
+  node.value !== undefined
+
 function pickDeltasFromBranch(
-  acc: any[],
-  obj: any,
+  acc: NormalizedDelta[],
+  node: unknown,
   predicate?: (delta: NormalizedDelta) => boolean
 ) {
-  if (typeof obj === 'object') {
-    if (obj.path === undefined || obj.value === undefined) {
-      for (const key in obj) {
-        pickDeltasFromBranch(acc, obj[key], predicate)
-      }
-    } else if (predicate === undefined || predicate(obj)) {
-      acc.push(obj)
+  if (typeof node !== 'object' || node === null) {
+    return acc
+  }
+  if (isCachedDelta(node)) {
+    if (predicate === undefined || predicate(node)) {
+      acc.push(node)
+    }
+  } else {
+    // for...in over StringKeyed rather than Object.values(): this
+    // recursion visits the whole cache on connect scans and must not
+    // allocate per branch.
+    const branch: StringKeyed = node
+    for (const key in branch) {
+      pickDeltasFromBranch(acc, branch[key], predicate)
     }
   }
   return acc
