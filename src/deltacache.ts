@@ -1473,11 +1473,7 @@ export default class DeltaCache {
         // only those whose own path is empty. Testing `if (key)` here
         // would treat '' as "no key" and leak every path into the
         // bootstrap snapshot.
-        for (const delta of findDeltas(context)) {
-          if (delta.path === '') {
-            deltas.push(delta)
-          }
-        }
+        findDeltas(context, deltas, hasEmptyPath)
       } else {
         let node: any = context
         for (let i = 0; i < keyParts.length; i++) {
@@ -1520,23 +1516,32 @@ function pathToProcessForFull(pathArray: any[]) {
   return pathArray
 }
 
-function pickDeltasFromBranch(acc: any[], obj: any) {
+const hasEmptyPath = (delta: NormalizedDelta) => delta.path === ''
+
+function pickDeltasFromBranch(
+  acc: any[],
+  obj: any,
+  predicate?: (delta: NormalizedDelta) => boolean
+) {
   if (typeof obj === 'object') {
     if (obj.path === undefined || obj.value === undefined) {
-      // not a delta, so process possible children
       for (const key in obj) {
-        pickDeltasFromBranch(acc, obj[key])
+        pickDeltasFromBranch(acc, obj[key], predicate)
       }
-    } else {
+    } else if (predicate === undefined || predicate(obj)) {
       acc.push(obj)
     }
   }
   return acc
 }
 
-function findDeltas(branchOrLeaf: any, acc: NormalizedDelta[] = []) {
+function findDeltas(
+  branchOrLeaf: any,
+  acc: NormalizedDelta[] = [],
+  predicate?: (delta: NormalizedDelta) => boolean
+) {
   for (const key in branchOrLeaf) {
-    pickDeltasFromBranch(acc, branchOrLeaf[key])
+    pickDeltasFromBranch(acc, branchOrLeaf[key], predicate)
   }
   return acc
 }
